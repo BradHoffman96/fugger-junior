@@ -19,10 +19,10 @@ func main() { //https://min-api.cryptocompare.com/data/pricehistorical
 
   var fsym string = "BTC" //set of variables to be inserted into URL
   var tsym string = "USD"
-  var limit string = "1000"
+  var limit string = "1000" //api says limit is 2000 but only pulling 667 results?
   var e string = "CCCAGG"
 
-  url := fmt.Sprintf("https://min-api.cryptocompare.com/data/histohour?fsym=%s&tsym=%s&limit=%s&aggregate=3&e=%s&toTs=1417547600", fsym, tsym, limit, e)
+  url := fmt.Sprintf("https://min-api.cryptocompare.com/data/histohour?fsym=%s&tsym=%s&limit=%s&aggregate=3&e=%s&toTs=1407547600", fsym, tsym, limit, e)
   resp, err := http.Get(url) //&toTs allows you to specify a specific time: https://min-api.cryptocompare.com/
   //fsym is from symbol // tsym is to symbol // limit is limit //e is name of exchange
   if err != nil{
@@ -34,8 +34,8 @@ func main() { //https://min-api.cryptocompare.com/data/pricehistorical
   if err != nil{
     log.Fatal(err)
   }
-
-  file, err := os.Create("result.csv")
+  csvName := fmt.Sprintf("%s_to_%s_%s.csv", fsym, tsym, e) //add time when I figure the return out better
+  file, err := os.Create(csvName)
   if err != nil {
     log.Fatal(err)
   }
@@ -51,6 +51,7 @@ func main() { //https://min-api.cryptocompare.com/data/pricehistorical
 
   for i, v := range(test) {
     item := (v.(map[string]interface{}))
+    fmt.Println(i)
     // fmt.Println(fmt.Sprintf("time: %f, close: %f, high: %f, low: %f, open: %f, volumefrom: %f, volumeto %f", //you can just do multiline code between ( )
     //   item["time"], item["close"], item["high"], item["low"], item["open"], item["volumefrom"], item["volumeto"])) //pull out values
     row := []string{strconv.FormatFloat(item["time"].(float64), 'E', -1, 64), strconv.FormatFloat(item["close"].(float64), 'E', -1, 64),
