@@ -146,7 +146,7 @@ if __name__ == '__main__':
             for t in timeline:
                 print('%s %s' % (t['y'], t['a']))
 
-            create_subscriber_file('out.subscriber.csv', timeline)
+            create_subscriber_file('%s.subscriber.csv' % args[1].lower(), timeline)
     else:
         print('Invalid command specified. Specify one of the following: post subscriber')
 
