@@ -6,6 +6,7 @@ import matplotlib.dates as mdates
 from matplotlib.finance import candlestick_ohlc
 import matplotlib
 import pylab
+import pandas as pd
 
 
 def relative_strength(values, window: int=14):
@@ -126,6 +127,14 @@ def read_file(file_path: str, column_map: dict, delimiter: str=';', dt_format: s
 
 
 def graph_moving_averages(data_name: str, values: tuple, maw1: int, maw2: int, ma_type='simple'):
+    """Graphs moving averages.
+
+    :param data_name: The name for the data in the graph.
+    :param values: The values.
+    :param maw1: The short moving average window.
+    :param maw2: The long moving average window.
+    :param ma_type: The type of moving average (either "simple" or "exponential").
+    """
     date, openp, highp, lowp, closep, volume = values
 
     matplotlib.rcParams.update({'font.size': 9})
@@ -187,23 +196,27 @@ def graph_moving_averages(data_name: str, values: tuple, maw1: int, maw2: int, m
     plt.show()
 
 
-def graph_macd(data_name: str, values: tuple, maw1: int, maw2: int):
+def graph_macd(data_name: str, values: tuple):
+    """Graphs moving averages convergence divergence between two exponential moving averages of size 26 and 12 compared
+       to an exponential moving average of size 9.
+
+    :param data_name: The name for the data in the graph.
+    :param values: The values.
+    """
     date, openp, highp, lowp, closep, volume = values
 
     matplotlib.rcParams.update({'font.size': 9})
 
     # Moving Average Plot
-    starting_point = len(date[maw2 - 1:])
-
     fig = plt.figure(facecolor='#07000d')
 
     ax1 = plt.subplot2grid((6, 4), (1, 0), rowspan=4, colspan=4, facecolor='#07000d')
 
     # Candle sticks
     candlestick_array = [(date[x], openp[x], highp[x], lowp[x], closep[x], volume[x]) for x in range(len(date))]
-    candlestick_ohlc(ax1, candlestick_array[-starting_point:], width=.6, colorup='#53c156', colordown='#ff1717')
+    candlestick_ohlc(ax1, candlestick_array[:], width=.6, colorup='#53c156', colordown='#ff1717')
 
-    ax1.plot(date[-starting_point:], openp[-starting_point:], '#cecece', label='open price', linewidth=1.5, linestyle='--')
+    ax1.plot(date[:], openp[:], '#cecece', label='open price', linewidth=1.5, linestyle='--')
 
     ax1.grid(True, color='w')
     ax1.xaxis.set_major_locator(mticker.MaxNLocator(10))
@@ -227,8 +240,8 @@ def graph_macd(data_name: str, values: tuple, maw1: int, maw2: int):
     nema = 9
     mas, maf, macd = moving_average_convergence(closep, 12, 26)
     ema = exp_moving_average(macd, nema)
-    ax2.plot(date[-starting_point:], macd[-starting_point:], color='#4ee6fd', lw=2)
-    ax2.fill_between(date[-starting_point:], macd[-starting_point:] - ema[-starting_point:], 0, alpha=0.5, facecolor='#00ffe8', edgecolor='#00ffe8')
+    ax2.plot(date[:], macd[:], color='#4ee6fd', lw=2)
+    ax2.fill_between(date[:], macd[:] - ema[:], 0, alpha=0.5, facecolor='#00ffe8', edgecolor='#00ffe8')
 
     plt.gca().yaxis.set_major_locator(mticker.MaxNLocator(prune='upper'))
     ax2.spines['bottom'].set_color("#5998ff")
@@ -248,11 +261,107 @@ def graph_macd(data_name: str, values: tuple, maw1: int, maw2: int):
     plt.show()
 
 
+def simulate_moving_average(values: tuple, maw1: int, maw2: int, investment: int=10000, show_graph: bool=False):
+    """Computes the moving average strategy, which simulates buying and selling at the crossover points between two
+       moving averages (assuming you invest at day 1 and stop on the last day).
+
+    :param values: The values.
+    :param maw1: The short moving average window.
+    :param maw2: The long moving average window.
+    :param investment: The initial investment.
+    :param show_graph: Whether the show the stance graph.
+    """
+    date, open_price, high_price, low_price, close_price, volume = values
+
+    if maw1 > maw2:
+        maw1, maw2 = maw2, maw1
+
+    df = pd.DataFrame(open_price, columns=['Open'])
+    df['mas'] = np.round(df['Open'].rolling(window=maw1).mean(), 2)
+    df['mab'] = np.round(df['Open'].rolling(window=maw2).mean(), 2)
+
+    df['diff'] = df['mas'] - df['mab']
+
+    threshold = 0
+    df['Stance'] = np.where(df['diff'] > threshold, 1, 0)
+    df['Stance'] = np.where(df['diff'] < threshold, -1, df['Stance'])
+    df['Market Returns'] = np.log(df['Open'] / df['Open'].shift(1))
+    df['Strategy'] = df['Market Returns'] * df['Stance'].shift(1)
+
+    df['Stance Diff'] = df['Stance'].diff()
+
+    # Simulate investments
+    earnings = investment / df['Open'][0]
+    waiting_to_sell = True
+    for day, sd in enumerate(df['Stance Diff']):
+        if sd == -2 and waiting_to_sell:
+            earnings *= df['Open'][day]  # Trade coins for $
+            waiting_to_sell = False
+        elif sd == 2 and not waiting_to_sell:
+            earnings /= df['Open'][day]  # Trade $ for coins
+            waiting_to_sell = True
+
+    if waiting_to_sell:
+        earnings *= df['Open'][df['Open'].size - 1]
+
+    print('Moving Average Strategy')
+    print('Initial Investment: %s' % investment)
+    print('Ending investment:  %s' % earnings)
+    print('Absolute Returns:   %s' % (earnings - investment))
+    print('Relative Returns:   %%%s' % (((earnings - investment) / investment) * 100))
+
+    if show_graph:
+        # Plot stances
+        fig = plt.figure(figsize=(15, 9))
+        ax = fig.add_subplot(2, 1, 1)
+
+        ax.plot(df.ix[:, :].index, df.ix[:, 'Open'], label='Open')
+        ax.plot(df.ix[:, :].index, df.ix[:, 'mas'], label='Short %s' % maw1)
+        ax.plot(df.ix[:, :].index, df.ix[:, 'mab'], label='Long %s' % maw2)
+
+        ax.set_ylabel('$')
+        ax.legend(loc='best')
+        ax.grid()
+
+        ax = fig.add_subplot(2, 1, 2)
+
+        ax.plot(df.ix[:, :].index, df.ix[:, 'Stance'], label='Stance')
+        ax.set_ylabel('Trading position')
+
+        plt.show()
+
+
+def buy_and_hold(values: tuple, investment: int = 10000):
+    """Computes the buy and hold strategy, which just looks a the starting and end value (assuming you invest at
+        day 1 and stop today).
+
+    :param values: The values.
+    :param investment: The initial investment.
+    """
+    date, open_price, high_price, low_price, close_price, volume = values
+
+    df = pd.DataFrame(open_price, columns=['Open'])
+
+    start = float(df.ix[0])
+    end = float(df.ix[df.size-1])
+    earnings = (investment / start) * end
+
+    print('Buy and Hold Strategy')
+    print('Initial Investment: %s' % investment)
+    print('Ending Investment:   %s' % earnings)
+    print('Absolute Returns:    %s' % (earnings - investment))
+    print('Relative Returns:    %%%s' % (((earnings - investment) / investment) * 100))
+
+
 if __name__ == '__main__':
     data = read_file('../data/bitcoin_coinmarketcap.csv', {
         'date': 0, 'open': 1, 'high': 2, 'low': 3, 'close': 4, 'volume': 5
-    }, num_rows=50)
+    }, num_rows=100)
 
-    graph_moving_averages('Bitcoin', data, 3, 10)
-    graph_moving_averages('Bitcoin', data, 3, 10, 'exponential')
-    graph_macd('Bitcoin', data, 3, 10)
+    graph_moving_averages('Bitcoin', data, 5, 15)
+    #graph_moving_averages('Bitcoin', data, 5, 15, 'exponential')
+    #graph_macd('Bitcoin', data)
+
+    simulate_moving_average(data, 5, 15, show_graph=True)
+
+    buy_and_hold(data)
