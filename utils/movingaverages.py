@@ -7,6 +7,7 @@ from matplotlib.finance import candlestick_ohlc
 import matplotlib
 import pylab
 import pandas as pd
+import pandas_datareader.data as web
 
 
 def relative_strength(values, window: int=14):
@@ -116,7 +117,12 @@ def read_file(file_path: str, column_map: dict, delimiter: str=';', dt_format: s
 
         n = np.array(data)
 
-        date = np.array(list(map(mdates.strpdate2num(dt_format), n[:, column_map['date']])))
+        def datefix(d: str):
+            d = d.replace('v', '/')
+
+            return mdates.strpdate2num(dt_format)(d)
+
+        date = np.array(list(map(datefix, n[:, column_map['date']])))
         open_price = np.array(n[:, column_map['open']], dtype=float)
         high_price = np.array(n[:, column_map['high']], dtype=float)
         low_price = np.array(n[:, column_map['low']], dtype=float)
@@ -124,6 +130,24 @@ def read_file(file_path: str, column_map: dict, delimiter: str=';', dt_format: s
         volume = np.array(n[:, column_map['volume']], dtype=float)
 
         return date, open_price, high_price, low_price, close_price, volume
+
+
+def read_stock(stock_name: str, start_date: str, end_date: str=None):
+    """Retrieves stock information from "iex".
+
+    :param stock_name: The name of the stock.
+    :param start_date: The start date of the stock. Should be %Y-%m-%d format.
+    :param end_date: The end date of the stock. Should be %Y-%m-%d format. Defaults to None, meaning today.
+    :return:
+    """
+    df = web.DataReader(stock_name, 'iex', start_date, end_date)
+
+    return (np.array(list(map(mdates.strpdate2num('%Y-%m-%d'), df.index))),
+            np.array(df['open'], dtype=float),
+            np.array(df['high'], dtype=float),
+            np.array(df['low'], dtype=float),
+            np.array(df['close'], dtype=float),
+            np.array(df['volume'], dtype=float))
 
 
 def graph_moving_averages(data_name: str, values: tuple, maw1: int, maw2: int, ma_type='simple'):
@@ -261,48 +285,51 @@ def graph_macd(data_name: str, values: tuple):
     plt.show()
 
 
-def simulate_moving_average(values: tuple, maw1: int, maw2: int, investment: int=10000, show_graph: bool=False):
+def simulate_moving_average(df: pd.DataFrame, maw1: int, maw2: int, column: str='open', investment: int=10000,
+                            ma_type: str='simple', show_graph: bool=False):
     """Computes the moving average strategy, which simulates buying and selling at the crossover points between two
        moving averages (assuming you invest at day 1 and stop on the last day).
 
-    :param values: The values.
+    :param df: A panda dataframe of the data.
     :param maw1: The short moving average window.
     :param maw2: The long moving average window.
+    :param column: The name of the price column in the data frame. Defaults to "open".
     :param investment: The initial investment.
+    :param ma_type: The type of moving average, either "simple" or "exponential".
     :param show_graph: Whether the show the stance graph.
     """
-    date, open_price, high_price, low_price, close_price, volume = values
-
-    if maw1 > maw2:
-        maw1, maw2 = maw2, maw1
-
-    df = pd.DataFrame(open_price, columns=['Open'])
-    df['mas'] = np.round(df['Open'].rolling(window=maw1).mean(), 2)
-    df['mab'] = np.round(df['Open'].rolling(window=maw2).mean(), 2)
+    if ma_type == 'simple':
+        df['mas'] = np.round(df[column].rolling(window=maw1).mean(), 2)
+        df['mab'] = np.round(df[column].rolling(window=maw2).mean(), 2)
+    elif ma_type == 'exponential':
+        df['mas'] = np.round(df[column].ewm(span=maw1, adjust=False).mean(), 2)
+        df['mab'] = np.round(df[column].ewm(span=maw2, adjust=False).mean(), 2)
+    else:
+        raise ValueError('ma_type must be either "simple" or "exponential", got %s instead' % ma_type)
 
     df['diff'] = df['mas'] - df['mab']
 
     threshold = 0
     df['Stance'] = np.where(df['diff'] > threshold, 1, 0)
     df['Stance'] = np.where(df['diff'] < threshold, -1, df['Stance'])
-    df['Market Returns'] = np.log(df['Open'] / df['Open'].shift(1))
+    df['Market Returns'] = np.log(df[column] / df[column].shift(1))
     df['Strategy'] = df['Market Returns'] * df['Stance'].shift(1)
 
     df['Stance Diff'] = df['Stance'].diff()
 
     # Simulate investments
-    earnings = investment / df['Open'][0]
+    earnings = investment / df[column][0]
     waiting_to_sell = True
     for day, sd in enumerate(df['Stance Diff']):
         if sd == -2 and waiting_to_sell:
-            earnings *= df['Open'][day]  # Trade coins for $
+            earnings *= df[column][day]  # Trade coins for $
             waiting_to_sell = False
         elif sd == 2 and not waiting_to_sell:
-            earnings /= df['Open'][day]  # Trade $ for coins
+            earnings /= df[column][day]  # Trade $ for coins
             waiting_to_sell = True
 
     if waiting_to_sell:
-        earnings *= df['Open'][df['Open'].size - 1]
+        earnings *= df[column][df[column].size - 1]
 
     print('Moving Average Strategy')
     print('Initial Investment: %s' % investment)
@@ -315,7 +342,7 @@ def simulate_moving_average(values: tuple, maw1: int, maw2: int, investment: int
         fig = plt.figure(figsize=(15, 9))
         ax = fig.add_subplot(2, 1, 1)
 
-        ax.plot(df.ix[:, :].index, df.ix[:, 'Open'], label='Open')
+        ax.plot(df.ix[:, :].index, df.ix[:, column], label='Open')
         ax.plot(df.ix[:, :].index, df.ix[:, 'mas'], label='Short %s' % maw1)
         ax.plot(df.ix[:, :].index, df.ix[:, 'mab'], label='Long %s' % maw2)
 
@@ -331,37 +358,40 @@ def simulate_moving_average(values: tuple, maw1: int, maw2: int, investment: int
         plt.show()
 
 
-def buy_and_hold(values: tuple, investment: int = 10000):
+def buy_and_hold(df: pd.DataFrame, column: str='open', investment: int = 10000):
     """Computes the buy and hold strategy, which just looks a the starting and end value (assuming you invest at
         day 1 and stop today).
 
-    :param values: The values.
+    :param df: A panda dataframe of the data.
+    :param column: The name of the price column in the data frame. Defaults to "open".
     :param investment: The initial investment.
     """
-    date, open_price, high_price, low_price, close_price, volume = values
-
-    df = pd.DataFrame(open_price, columns=['Open'])
-
-    start = float(df.ix[0])
-    end = float(df.ix[df.size-1])
+    start = float(df[column][0])
+    end = float(df[column][df[column].size-1])
     earnings = (investment / start) * end
 
     print('Buy and Hold Strategy')
-    print('Initial Investment: %s' % investment)
+    print('Initial Investment:  %s' % investment)
     print('Ending Investment:   %s' % earnings)
     print('Absolute Returns:    %s' % (earnings - investment))
     print('Relative Returns:    %%%s' % (((earnings - investment) / investment) * 100))
 
 
 if __name__ == '__main__':
-    data = read_file('../data/bitcoin_coinmarketcap.csv', {
+    data = read_file('../data/coinmarketcap/ethereum.csv', {
         'date': 0, 'open': 1, 'high': 2, 'low': 3, 'close': 4, 'volume': 5
-    }, num_rows=100)
+    }, num_rows=200)
 
-    graph_moving_averages('Bitcoin', data, 5, 15)
+    #data = read_stock('TUES', '2016-01-01')
+
+    #graph_moving_averages('Bitcoin', data, 5, 15)
     #graph_moving_averages('Bitcoin', data, 5, 15, 'exponential')
     #graph_macd('Bitcoin', data)
 
-    simulate_moving_average(data, 5, 15, show_graph=True)
+    _, open_price, _, _, close_price, _ = data
 
-    buy_and_hold(data)
+    df = pd.DataFrame(close_price, columns=['close'])
+
+    simulate_moving_average(df, 5, 20, column='close', ma_type='exponential', show_graph=True)
+
+    buy_and_hold(df, column='close')
