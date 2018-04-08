@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"time"
 
 	"github.com/BradHoffman96/fugger-junior/fugger"
@@ -34,7 +35,7 @@ type BtcUsdPredictor struct {
 
 //Serve pushes price updates every 24 hours for the recommender
 func (p *CryptoCompareProvider) Serve() {
-	ticker := time.NewTicker(24 * time.Hour)
+	ticker := time.NewTicker(3 * time.Second)
 	go func() {
 		for {
 			select {
@@ -45,7 +46,7 @@ func (p *CryptoCompareProvider) Serve() {
 	}()
 }
 
-// CcProvideBtcUsd returns the current price of bitcoin in USD
+// CcProvideBtcUsd pushes the current price of bitcoin in USD into the channel
 func CcProvideBtcUsd(c chan<- fugger.CryptoInputData) {
 	data, err := fugger.GetCurrent(fugger.BitcoinSymbol, fugger.DollarSymbol)
 
@@ -54,6 +55,7 @@ func CcProvideBtcUsd(c chan<- fugger.CryptoInputData) {
 	} else {
 		var cid = fugger.CryptoInputData{Price: data, Time: time.Now().UTC().Unix()}
 		c <- cid
+		//log.Printf("Pushed new value to channel: $%f ", data)
 	}
 }
 
@@ -91,18 +93,20 @@ func (w *DummyWallet) ConsumeRecommendations() {
 
 //Exchange currencies
 func (w *DummyWallet) Exchange(currentCur, newCur fugger.CurrencyType, amtToBuy float64) (float64, error) {
-	rate, err := fugger.GetCurrent(fugger.DollarSymbol, fugger.BitcoinSymbol)
+	rate, err := fugger.GetCurrent(fugger.BitcoinSymbol, fugger.DollarSymbol)
 	if err != nil {
 		panic(err)
 	} else {
 		//Usd to Bitcoin
 		if currentCur == fugger.Usd && newCur == fugger.Bitcoin {
 			w.Currencies[fugger.Bitcoin] = w.Currencies[fugger.Usd] / rate
-			w.Currencies[fugger.Usd] = 0
+			w.Currencies[fugger.Usd] = 0.0
+			log.Printf("Bought bitcoin: %f BTC", w.Currencies[fugger.Bitcoin])
 			//Bitcoin to USD
 		} else if currentCur == fugger.Bitcoin && newCur == fugger.Usd {
 			w.Currencies[fugger.Usd] = w.Currencies[fugger.Bitcoin] * rate
-			w.Currencies[fugger.Bitcoin] = 0
+			w.Currencies[fugger.Bitcoin] = 0.0
+			log.Printf("Sold bitcoin: $%f", w.Currencies[fugger.Usd])
 		}
 	}
 	return 1, nil
@@ -114,7 +118,7 @@ func (p *BtcUsdPredictor) Execute() {
 	longLength := 20
 	shortWindow := NewMA(shortLength)
 	longWindow := NewMA(longLength)
-	waitingToSell := true
+	waitingToSell := false
 	for {
 	emptyQueue:
 		for {
@@ -123,6 +127,7 @@ func (p *BtcUsdPredictor) Execute() {
 				if ok {
 					shortWindow.Add(data.Price)
 					longWindow.Add(data.Price)
+					log.Printf("Added new value to window: $%f", data.Price)
 				}
 			default:
 				break emptyQueue
@@ -132,16 +137,18 @@ func (p *BtcUsdPredictor) Execute() {
 		//get difference between the two windows
 		diff := shortWindow.Avg() - longWindow.Avg()
 		//if positive buy
-		if diff > 0 && waitingToSell {
-			waitingToSell = false
+		if diff > 0 && !waitingToSell {
+			waitingToSell = true
 			recc := fugger.CryptoOutputData{Buy: true, Confidence: 1.0}
 			p.recommender <- recc
+			log.Printf("Added Recommendation to buy.")
 		}
 		//if negative sell
-		if diff < 0 && !waitingToSell {
-			waitingToSell = true
+		if diff < 0 && waitingToSell {
+			waitingToSell = false
 			recc := fugger.CryptoOutputData{Buy: false, Confidence: 1.0}
 			p.recommender <- recc
+			log.Printf("Added Recommendation to sell.")
 		}
 	}
 }
@@ -157,7 +164,7 @@ func main() {
 	CcHistoricalBtcUsd(btcTicker, window)
 	bfxProvider := CryptoCompareProvider{btcTicker}
 	predictor := BtcUsdPredictor{btcTicker, recommender}
-	wallet := Init([]fugger.CurrencyType{fugger.Usd, fugger.Bitcoin})
+	wallet := Init([]fugger.CurrencyType{fugger.Usd, fugger.Bitcoin}, recommender)
 	wallet.Currencies[fugger.Usd] = 10000
 
 	//provide daily price updates
@@ -224,9 +231,10 @@ func NewMA(window int) *MovingAverage {
 }
 
 //Init DummyWallet initalization
-func Init(currencies []fugger.CurrencyType) *DummyWallet {
+func Init(currencies []fugger.CurrencyType, recChan chan fugger.CryptoOutputData) *DummyWallet {
 	wallet := &DummyWallet{
-		Currencies: make(map[fugger.CurrencyType]float64),
+		Currencies:  make(map[fugger.CurrencyType]float64),
+		recommender: recChan,
 	}
 	for _, c := range currencies {
 		wallet.Currencies[c] = 0.0
