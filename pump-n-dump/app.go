@@ -59,8 +59,8 @@ func main() {
 		}
 
 		for market, summary := range markets {
-			fmt.Print(market + ": ")
-			fmt.Println(summary)
+			// fmt.Print(market + ": ")
+			// fmt.Println(summary)
 
 			//TODO: Make this concurrent
 			summary.ID = bson.NewObjectId()
@@ -70,6 +70,6 @@ func main() {
 		}
 
 		fmt.Println(time.Now())
-		time.Sleep(10 * time.Second)
+		time.Sleep(30 * time.Second)
 	}
 }
