@@ -1,6 +1,7 @@
 package dao
 
 import (
+	"fugger-junior/pump-n-dump/models"
 	"log"
 
 	"github.com/globalsign/mgo"
@@ -28,6 +29,7 @@ func (m *MarketsDAO) Connect() {
 	db = session.DB(m.Database)
 }
 
-func (m *MarketsDAO) Insert(summary Summary) {
-
+func (m *MarketsDAO) Insert(summary models.Summary) error {
+	err := db.C(COLLECTION).Insert(&summary)
+	return err
 }
