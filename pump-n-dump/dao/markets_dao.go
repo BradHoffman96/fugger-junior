@@ -29,7 +29,7 @@ func (m *MarketsDAO) Connect() {
 	db = session.DB(m.Database)
 }
 
-func (m *MarketsDAO) Insert(summary models.Summary) error {
-	err := db.C(COLLECTION).Insert(&summary)
+func (m *MarketsDAO) Insert(market string, summary models.Summary) error {
+	err := db.C(market).Insert(&summary)
 	return err
 }
