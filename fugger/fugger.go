@@ -1,14 +1,14 @@
-package main
+package fugger
 
 import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strconv"
 	"time"
 
 	"github.com/go-resty/resty"
 	"github.com/patrickmn/go-cache"
-	"github.com/senseyeio/roger"
 )
 
 //A CurrencyType is an int distinguishing between Bitcoin, Ethereum, Ripple, ect.
@@ -21,6 +21,7 @@ var c = cache.New(5*time.Minute, 10*time.Minute)
 const (
 	Bitcoin CurrencyType = iota
 	Ethereum
+	Usd
 )
 
 //A MarketPlace is an int distinguishing between Bitfinex, Binance, etc.
@@ -37,20 +38,21 @@ const (
 
 //A CryptoInputData stores the current price and timestamp for use with an algorithm
 type CryptoInputData struct {
-	price float64
-	time  int64
+	Price float64
+	Time  int64
 }
 
 //A CryptoOutputData stores the data that tells a wallet whether or not it should buy with a confidence interval.
 type CryptoOutputData struct {
-	buy        bool
-	confidence float64
+	Buy        bool
+	Confidence float64
 }
 
 //A Wallet keeps track of an amount of currency for a specific MarketPlace
 type Wallet interface {
 	Init()
 	Exchange(CurrencyType, CurrencyType, float64) (float64, error)
+	ConsumeRecommendations()
 	MarketPlace() MarketPlace
 }
 
@@ -62,70 +64,6 @@ type TickerProvider interface {
 //An ExchangeAlgorithm takes in TickerProvider data and output exchange requests to Wallets.
 type ExchangeAlgorithm interface {
 	Execute()
-}
-
-//A DummyWallet for keeping track of and exchanging currencies for testing purposes.
-type DummyWallet struct {
-	Currencies map[CurrencyType]float64
-}
-
-type CryptoCompareProvider struct {
-	btcTicker chan CryptoInputData
-	ethTicker chan CryptoInputData
-}
-
-type BtcEthPredictor struct {
-	btcTicker   chan CryptoInputData
-	ethTicker   chan CryptoInputData
-	recommender chan CryptoOutputData
-}
-
-func main() {
-	btcTicker := make(chan CryptoInputData, 256)
-	ethTicker := make(chan CryptoInputData, 256)
-	recommender := make(chan CryptoOutputData, 256)
-
-	bfxProvider := CryptoCompareProvider{btcTicker, ethTicker}
-	predictor := BtcEthPredictor{btcTicker, ethTicker, recommender}
-	bfxProvider.Serve()
-	go predictor.Execute()
-
-	fmt.Printf("Hello, world.\n")
-}
-
-func (p *BtcEthPredictor) Execute() {
-	rClient, err := roger.NewRClient("127.0.0.1", 6311)
-	if err != nil {
-		fmt.Println("Failed to connect to Rserve.")
-		return
-	}
-
-}
-
-func CcProvideBtcUsd(c chan<- CryptoInputData) {
-	data, err := GetCurrent(BitcoinSymbol, DollarSymbol)
-
-	if err != nil {
-		panic(err)
-	} else {
-		var cid = CryptoInputData{data, time.Now().UTC().Unix()}
-		c <- cid
-	}
-}
-
-func CcProvideEthUsd(c chan<- CryptoInputData) {
-	//get data from CryptoCompare
-	//format it
-	//stuff it into the channel
-}
-
-func (p *CryptoCompareProvider) Serve() {
-	go CcProvideBtcUsd(p.btcTicker)
-	go CcProvideEthUsd(p.ethTicker)
-}
-
-func (w *DummyWallet) Exchange(currentCur, newCur CurrencyType, amtToBuy float64) (float64, error) {
-
 }
 
 // Currency ticker symbols.
@@ -177,8 +115,8 @@ func GetCurrent(fsym string, tsym string) (float64, error) {
 	return data.USD, nil
 }
 
-func GetHistorical(fsym string, tsym string, utc int) (float64, error) {
-	url := fmt.Sprintf(historicalDataURL, fsym, tsym, utc)
+func GetHistorical(fsym string, tsym string, utc int64) (float64, error) {
+	url := fmt.Sprintf(historicalDataURL, fsym, tsym, strconv.FormatInt(utc, 10))
 
 	resp, err := resty.R().Get(url)
 
