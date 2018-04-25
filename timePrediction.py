@@ -30,11 +30,11 @@ def main(lags):
 	X_test, y_test = prepare_data(test, lags)
 	y_true = y_test
 
-	plt.plot(y_test, label='OG data', color='#006699') #just to show that it is lagged by one, which it is (zoom in)
-	plt.plot(X_test, label='OG data', color='orange')
-	plt.legend(loc='upper left')
-	plt.title('%d period lagged' % lags)
-	plt.show()
+	# plt.plot(y_test, label='OG data', color='#006699') #just to show that it is lagged by one, which it is (zoom in)
+	# plt.plot(X_test, label='OG data', color='orange')
+	# plt.legend(loc='upper left')
+	# plt.title('%d period lagged' % lags)
+	# plt.show()
 
 	mdl = Sequential()
 	mdl.add(Dense(12, input_dim=lags, activation='relu'))
@@ -43,7 +43,7 @@ def main(lags):
 	# mdl.add(Dense(8, activation='relu')) #lower the mse the better the model
 	mdl.add(Dense(1))
 	mdl.compile(loss='mean_squared_error', optimizer='adam', metrics=['accuracy'])
-	hist = mdl.fit(X_train, y_train, validation_split=0.66, epochs=200, batch_size=10, verbose=2) # more epochs lead to higher mse
+	hist = mdl.fit(X_train, y_train, validation_split=0.66, epochs=100, batch_size=10, verbose=2) # more epochs lead to higher mse
 
 	train_score = mdl.evaluate(X_train, y_train, verbose=0)
 	print('Train Score: {:.2f} MSE ({:.2f} RMSE)'.format(float(train_score[0]), math.sqrt(float(train_score[0])))) #formatting and crap
