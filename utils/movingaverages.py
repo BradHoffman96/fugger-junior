@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import matplotlib.dates as mdates
-from matplotlib.finance import candlestick_ohlc
+#from matplotlib.finance import candlestick_ohlc
 import matplotlib
 import pylab
 import pandas as pd
@@ -182,8 +182,8 @@ def graph_moving_averages(data_name: str, values: tuple, maw1: int, maw2: int, m
     ax1 = plt.subplot2grid((6, 4), (1, 0), rowspan=4, colspan=4, facecolor='#07000d')
 
     # Candle sticks
-    candlestick_array = [(date[x], openp[x], highp[x], lowp[x], closep[x], volume[x]) for x in range(len(date))]
-    candlestick_ohlc(ax1, candlestick_array[-starting_point:], width=.6, colorup='#53c156', colordown='#ff1717')
+    #candlestick_array = [(date[x], openp[x], highp[x], lowp[x], closep[x], volume[x]) for x in range(len(date))]
+    #candlestick_ohlc(ax1, candlestick_array[-starting_point:], width=.6, colorup='#53c156', colordown='#ff1717')
 
     # Plot points
     ax1.plot(date[-starting_point:], openp[-starting_point:], '#cecece', label='open price', linewidth=1.5,
@@ -237,8 +237,8 @@ def graph_macd(data_name: str, values: tuple):
     ax1 = plt.subplot2grid((6, 4), (1, 0), rowspan=4, colspan=4, facecolor='#07000d')
 
     # Candle sticks
-    candlestick_array = [(date[x], openp[x], highp[x], lowp[x], closep[x], volume[x]) for x in range(len(date))]
-    candlestick_ohlc(ax1, candlestick_array[:], width=.6, colorup='#53c156', colordown='#ff1717')
+    #candlestick_array = [(date[x], openp[x], highp[x], lowp[x], closep[x], volume[x]) for x in range(len(date))]
+    #candlestick_ohlc(ax1, candlestick_array[:], width=.6, colorup='#53c156', colordown='#ff1717')
 
     ax1.plot(date[:], openp[:], '#cecece', label='open price', linewidth=1.5, linestyle='--')
 

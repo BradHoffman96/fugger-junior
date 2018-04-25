@@ -70,6 +70,6 @@ func main() {
 		}
 
 		fmt.Println(time.Now())
-		time.Sleep(30 * time.Second)
+		time.Sleep(60 * time.Second)
 	}
 }
