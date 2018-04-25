@@ -4,6 +4,8 @@ import (
 	"fugger-junior/pump-n-dump/models"
 	"log"
 
+	"github.com/globalsign/mgo/bson"
+
 	"github.com/globalsign/mgo"
 )
 
@@ -32,4 +34,10 @@ func (m *MarketsDAO) Connect() {
 func (m *MarketsDAO) Insert(market string, summary models.Summary) error {
 	err := db.C(market).Insert(&summary)
 	return err
+}
+
+func (m *MarketsDAO) FindAll(market string) ([]models.Summary, error) {
+	var summaries []models.Summary
+	err := db.C(market).Find(bson.M{}).All(&summaries)
+	return summaries, err
 }
