@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/wcharczuk/go-chart/drawing"
+
 	"github.com/wcharczuk/go-chart"
 )
 
@@ -39,8 +41,26 @@ func getValues() ([]time.Time, []float64) {
 	return dates, prices
 }
 
+func getOpenOrders() ([]float64, []float64) {
+	var openBuyOrders []float64
+	var openSellOrders []float64
+
+	summaries, err := dao.FindAll("BTC-TRX")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for _, summary := range summaries {
+		openBuyOrders = append(openBuyOrders, summary.OpenBuyOrders)
+		openSellOrders = append(openSellOrders, summary.OpenSellOrders)
+	}
+
+	return openBuyOrders, openSellOrders
+}
+
 func drawChart(res http.ResponseWriter, req *http.Request) {
 	dates, prices := getValues()
+	_, openSellOrders := getOpenOrders()
 
 	max := 0.0
 	min := 0.0
@@ -65,6 +85,28 @@ func drawChart(res http.ResponseWriter, req *http.Request) {
 		YValues: prices,
 	}
 
+	// buyOrdersSeries := chart.TimeSeries{
+	// 	Name: "BTC-TRX Buy Orders",
+	// 	Style: chart.Style{
+	// 		Show:        true,
+	// 		StrokeColor: drawing.ColorGreen,
+	// 	},
+	// 	XValues: dates,
+	// 	YValues: openBuyOrders,
+	// 	YAxis:   chart.YAxisSecondary,
+	// }
+
+	sellOrdersSeries := chart.TimeSeries{
+		Name: "BTC-TRX Sell Orders",
+		Style: chart.Style{
+			Show:        true,
+			StrokeColor: drawing.ColorRed,
+		},
+		XValues: dates,
+		YValues: openSellOrders,
+		YAxis:   chart.YAxisSecondary,
+	}
+
 	graph := chart.Chart{
 		XAxis: chart.XAxis{
 			Style:        chart.Style{Show: true},
@@ -73,12 +115,20 @@ func drawChart(res http.ResponseWriter, req *http.Request) {
 		YAxis: chart.YAxis{
 			Style: chart.Style{Show: true},
 			Range: &chart.ContinuousRange{
-				Max: .000007,
 				Min: .000006,
+				Max: .000007,
+			},
+		},
+		YAxisSecondary: chart.YAxis{
+			Style: chart.StyleShow(),
+			Range: &chart.ContinuousRange{
+				Min: 7000,
+				Max: 8000,
 			},
 		},
 		Series: []chart.Series{
 			priceSeries,
+			sellOrdersSeries,
 		},
 	}
 
